@@ -2,7 +2,7 @@
   "name": "ai-commit",
   "displayName": "AI Commit",
   "description": "Gera mensagens de commit com Ollama, OpenRouter, OpenCode ou Codex.",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "publisher": "local",
   "engines": { "vscode": "^1.90.0" },
   "categories": ["SCM Providers", "Machine Learning"],
@@ -30,16 +30,16 @@
     "configuration": {
       "title": "AI Commit",
       "properties": {
-        "aiCommit.provider": { "type": "string", "enum": ["ollama", "openrouter", "opencode", "codex"], "default": "ollama", "description": "Provedor usado para gerar commits." },
-        "aiCommit.ollamaModel": { "type": "string", "default": "qwen3.5:9b" },
-        "aiCommit.ollamaBaseUrl": { "type": "string", "default": "http://127.0.0.1:11434" },
-        "aiCommit.openRouterModel": { "type": "string", "default": "openai/gpt-4.1-mini" },
-        "aiCommit.openRouterBaseUrl": { "type": "string", "default": "https://openrouter.ai/api/v1" },
-        "aiCommit.openCodeExecutable": { "type": "string", "default": "opencode" },
-        "aiCommit.openCodeModel": { "type": "string", "default": "" },
-        "aiCommit.codexExecutable": { "type": "string", "default": "codex" },
-        "aiCommit.codexModel": { "type": "string", "default": "" },
-        "aiCommit.requestTimeoutSeconds": { "type": "number", "default": 180, "minimum": 10, "maximum": 600, "description": "Tempo limite para cada geracao, em segundos." }
+        "aiCommit.provider": { "type": "string", "scope": "machine", "enum": ["ollama", "openrouter", "opencode", "codex"], "default": "ollama", "description": "Provedor usado para gerar commits." },
+        "aiCommit.ollamaModel": { "type": "string", "scope": "machine", "default": "qwen3.5:9b" },
+        "aiCommit.ollamaBaseUrl": { "type": "string", "scope": "machine", "default": "http://127.0.0.1:11434" },
+        "aiCommit.openRouterModel": { "type": "string", "scope": "machine", "default": "openai/gpt-4.1-mini" },
+        "aiCommit.openRouterBaseUrl": { "type": "string", "scope": "machine", "default": "https://openrouter.ai/api/v1" },
+        "aiCommit.openCodeExecutable": { "type": "string", "scope": "machine", "default": "opencode" },
+        "aiCommit.openCodeModel": { "type": "string", "scope": "machine", "default": "" },
+        "aiCommit.codexExecutable": { "type": "string", "scope": "machine", "default": "codex" },
+        "aiCommit.codexModel": { "type": "string", "scope": "machine", "default": "" },
+        "aiCommit.requestTimeoutSeconds": { "type": "number", "scope": "machine", "default": 180, "minimum": 10, "maximum": 600, "description": "Tempo limite para cada geracao, em segundos." }
       }
     }
   }
