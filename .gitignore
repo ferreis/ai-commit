@@ -1,0 +1,32 @@
+# Dependencias
+node_modules/
+
+# Build e testes
+out/
+dist/
+coverage/
+.nyc_output/
+.vscode-test/
+
+# Pacotes gerados da extensao
+*.vsix
+
+# Logs e arquivos temporarios
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# Variaveis locais e segredos
+.env
+.env.*
+!.env.example
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Cache de ferramentas
+.eslintcache
+.cache/

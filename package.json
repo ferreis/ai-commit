@@ -1,0 +1,46 @@
+{
+  "name": "ai-commit",
+  "displayName": "AI Commit",
+  "description": "Gera mensagens de commit com Ollama, OpenRouter, OpenCode ou Codex.",
+  "version": "0.3.1",
+  "publisher": "local",
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["SCM Providers", "Machine Learning"],
+  "activationEvents": ["onCommand:aiCommit.generate", "onCommand:aiCommit.openSettings", "onCommand:aiCommit.showLogs", "onCommand:aiCommit.testProvider"],
+  "main": "./extension.js",
+  "scripts": {
+    "check": "node --check extension.js && node --check src/diagnostics.js && node --check src/providers.js && node --check src/settings-panel.js",
+    "test": "node --test"
+  },
+  "contributes": {
+    "commands": [
+      { "command": "aiCommit.generate", "title": "Gerar mensagem de commit com IA", "icon": "$(sparkle)" },
+      { "command": "aiCommit.openSettings", "title": "Configurar gerador de commit", "icon": "$(settings-gear)" },
+      { "command": "aiCommit.showLogs", "title": "Mostrar diagnostico do gerador", "icon": "$(output)" },
+      { "command": "aiCommit.testProvider", "title": "Testar provedor do AI Commit", "icon": "$(debug-disconnect)" }
+    ],
+    "menus": {
+      "scm/title": [
+        { "command": "aiCommit.generate", "group": "navigation@5", "when": "scmProvider == git" },
+        { "command": "aiCommit.openSettings", "group": "navigation@6", "when": "scmProvider == git" },
+        { "command": "aiCommit.testProvider", "group": "navigation@7", "when": "scmProvider == git" },
+        { "command": "aiCommit.showLogs", "group": "navigation@8", "when": "scmProvider == git" }
+      ]
+    },
+    "configuration": {
+      "title": "AI Commit",
+      "properties": {
+        "aiCommit.provider": { "type": "string", "enum": ["ollama", "openrouter", "opencode", "codex"], "default": "ollama", "description": "Provedor usado para gerar commits." },
+        "aiCommit.ollamaModel": { "type": "string", "default": "qwen3.5:9b" },
+        "aiCommit.ollamaBaseUrl": { "type": "string", "default": "http://127.0.0.1:11434" },
+        "aiCommit.openRouterModel": { "type": "string", "default": "openai/gpt-4.1-mini" },
+        "aiCommit.openRouterBaseUrl": { "type": "string", "default": "https://openrouter.ai/api/v1" },
+        "aiCommit.openCodeExecutable": { "type": "string", "default": "opencode" },
+        "aiCommit.openCodeModel": { "type": "string", "default": "" },
+        "aiCommit.codexExecutable": { "type": "string", "default": "codex" },
+        "aiCommit.codexModel": { "type": "string", "default": "" },
+        "aiCommit.requestTimeoutSeconds": { "type": "number", "default": 180, "minimum": 10, "maximum": 600, "description": "Tempo limite para cada geracao, em segundos." }
+      }
+    }
+  }
+}
