@@ -1,11 +1,11 @@
 'use strict';
 
 const vscode = require('vscode');
+const { buildPrompt, cleanCommitMessage, isValidCommitMessage } = require('./src/commit-message');
 const { Diagnostics } = require('./src/diagnostics');
 const { callProvider, listProviderModels, stopActiveProcesses, testProvider } = require('./src/providers');
 const { SettingsPanel } = require('./src/settings-panel');
 
-const MAX_DIFF_LENGTH = 60000;
 let diagnostics;
 
 async function getGitApi() {
@@ -32,29 +32,6 @@ async function getDiff(repository) {
   const workingTreeDiff = await repository.diff(false);
   if (!workingTreeDiff.trim()) throw new Error('Nenhuma alteracao encontrada para descrever.');
   return { content: workingTreeDiff, source: 'diretorio de trabalho' };
-}
-
-function buildPrompt(diffContent) {
-  return [
-    'Gere uma mensagem de commit em portugues do Brasil para o diff abaixo.',
-    'Use Conventional Commits: tipo(escopo opcional): descricao curta.',
-    'Tipos: feat, fix, refactor, chore, docs, test, style, perf, build, ci, revert.',
-    'Se a mudanca for simples, gere somente a primeira linha.',
-    'Se precisar de corpo, use uma linha vazia e frases curtas.',
-    'Nao use ferramentas, nao altere arquivos e nao execute comandos.',
-    'Nao invente informacoes. Nao use Markdown, aspas ou explicacoes.',
-    'Responda somente com a mensagem final do commit.',
-    '',
-    'DIFF:',
-    diffContent.slice(0, MAX_DIFF_LENGTH),
-  ].join('\n');
-}
-
-function cleanCommitMessage(message) {
-  return String(message)
-    .replace(/^```(?:text)?\s*/i, '')
-    .replace(/\s*```$/, '')
-    .trim();
 }
 
 async function generateCommitMessage(extensionContext) {
@@ -86,7 +63,12 @@ async function generateCommitMessage(extensionContext) {
     });
     if (!generatedMessage) throw new Error('O modelo nao gerou uma mensagem.');
 
-    repository.inputBox.value = cleanCommitMessage(generatedMessage);
+    const commitMessage = cleanCommitMessage(generatedMessage);
+    if (!isValidCommitMessage(commitMessage)) {
+      throw new Error('O modelo retornou uma mensagem fora do formato tipo(escopo): descricao.');
+    }
+
+    repository.inputBox.value = commitMessage;
     diagnostics.write(`Mensagem recebida em ${((Date.now() - startTime) / 1000).toFixed(1)} segundos.`, 'success');
     diagnostics.write(`Resultado:\n${repository.inputBox.value}`, 'success');
     await vscode.commands.executeCommand('workbench.view.scm');

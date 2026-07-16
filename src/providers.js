@@ -198,7 +198,14 @@ async function requestOllama(configuration, prompt, cancellationToken, diagnosti
   let generatedResponse = '';
 
   diagnostics.write(`Ollama: iniciando o modelo ${model}.`, 'activity');
-  await requestStreaming(endpoint, {}, JSON.stringify({ model, prompt, stream: true, think: true }), getTimeoutMilliseconds(configuration), cancellationToken, diagnostics, (line) => {
+  const requestBody = JSON.stringify({
+    model,
+    prompt,
+    stream: true,
+    think: true,
+    options: { temperature: 0 },
+  });
+  await requestStreaming(endpoint, {}, requestBody, getTimeoutMilliseconds(configuration), cancellationToken, diagnostics, (line) => {
     if (!line.trim()) return;
     let event;
     try {

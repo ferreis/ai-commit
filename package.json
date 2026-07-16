@@ -9,7 +9,7 @@
   "activationEvents": ["onCommand:aiCommit.generate", "onCommand:aiCommit.openSettings", "onCommand:aiCommit.showLogs", "onCommand:aiCommit.testProvider"],
   "main": "./extension.js",
   "scripts": {
-    "check": "node --check extension.js && node --check src/diagnostics.js && node --check src/providers.js && node --check src/settings-panel.js",
+    "check": "node --check extension.js && node --check src/commit-message.js && node --check src/diagnostics.js && node --check src/providers.js && node --check src/settings-panel.js",
     "test": "node --test"
   },
   "contributes": {
