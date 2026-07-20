@@ -8,6 +8,7 @@ O resultado é inserido no campo de mensagem do Controle de Código-Fonte. A ext
 
 - Geração baseada nas alterações em stage ou no diretório de trabalho.
 - Mensagens no padrão Conventional Commits.
+- Cabeçalho objetivo e corpo explicativo em tópicos, considerando todas as alterações do diff.
 - Suporte a Ollama, OpenRouter, OpenCode e Codex CLI.
 - Seleção dos modelos disponíveis em cada provedor.
 - Teste de conexão antes da geração.

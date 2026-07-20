@@ -52,20 +52,27 @@ async function generateCommitMessage(extensionContext) {
     diagnostics.write(`Repositorio: ${repository.rootUri.fsPath}`);
     diagnostics.write(`Diff: ${diff.source}, ${diff.content.length} caracteres.`);
 
-    progress.report({ message: 'Aguardando o modelo...' });
-    const generatedMessage = await callProvider(provider, {
-      configuration,
-      prompt: buildPrompt(diff.content),
-      workingDirectory: repository.rootUri.fsPath,
-      secrets: extensionContext.secrets,
-      cancellationToken,
-      diagnostics,
-    });
-    if (!generatedMessage) throw new Error('O modelo nao gerou uma mensagem.');
+    let commitMessage = '';
+    const maximumAttempts = 2;
+    for (let attemptNumber = 1; attemptNumber <= maximumAttempts; attemptNumber += 1) {
+      progress.report({ message: attemptNumber === 1 ? 'Aguardando o modelo...' : 'Corrigindo resposta do modelo...' });
+      const generatedMessage = await callProvider(provider, {
+        configuration,
+        prompt: buildPrompt(diff.content, attemptNumber > 1),
+        workingDirectory: repository.rootUri.fsPath,
+        secrets: extensionContext.secrets,
+        cancellationToken,
+        diagnostics,
+      });
+      if (!generatedMessage) throw new Error('O modelo nao gerou uma mensagem.');
 
-    const commitMessage = cleanCommitMessage(generatedMessage);
+      commitMessage = cleanCommitMessage(generatedMessage);
+      if (isValidCommitMessage(commitMessage)) break;
+      diagnostics.write(`Tentativa ${attemptNumber}: resposta fora do formato obrigatorio.`, 'error');
+    }
+
     if (!isValidCommitMessage(commitMessage)) {
-      throw new Error('O modelo retornou uma mensagem fora do formato tipo(escopo): descricao.');
+      throw new Error('O modelo nao gerou uma mensagem valida com cabecalho e corpo explicativo.');
     }
 
     repository.inputBox.value = commitMessage;
