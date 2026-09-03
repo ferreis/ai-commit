@@ -1,0 +1,100 @@
+{
+  "projeto": "ai-commit",
+  "repositorio": "ferreis/ai-commit",
+  "data": "03/09/2026",
+  "branch": "dev",
+  "escopo": "Runtime completo da extensão VS Code, webview, integrações HTTP/CLI, manifestos/configuração, testes, árvore do repositório e histórico Git disponível (4 commits).",
+  "stack": {
+    "linguagem": "JavaScript (Node.js, CommonJS)",
+    "framework": "VS Code Extension API; sem framework web/backend HTTP",
+    "banco_orm": "Não existe banco de dados, ORM ou query builder",
+    "auth": "Não existe autenticação multiusuário própria; segredo OpenRouter armazenado via VS Code SecretStorage",
+    "frontend": "Webview HTML/CSS/JavaScript gerada por src/settings-panel.js",
+    "deploy": "Pacote VSIX/extension.vsixmanifest; não há Docker, GitHub Actions, Helm ou Terraform na árvore auditada",
+    "integracoes": "VS Code Git API, OpenRouter/Ollama via node:http/node:https, OpenCode/Codex via child_process.spawn"
+  },
+  "mapeamento": [
+    {"categoria":"1. BANCO SEM TRANCA","equivalente":"Sem banco/tenant. O equivalente útil é o isolamento de contexto entre múltiplos repositórios Git abertos, porque o diff selecionado pode ser enviado a provedores remotos."},
+    {"categoria":"2. PERMISSÃO DEFINIDA NO NAVEGADOR","equivalente":"Não há usuários, papéis ou servidor. A webview é UI local e as ações são processadas pelo extension host; não existe gate de role equivalente."},
+    {"categoria":"3. IDOR","equivalente":"Não há handlers HTTP, banco ou objetos remotos próprios identificados por ID. Categoria não aplicável."},
+    {"categoria":"4. CHAVES EXPOSTAS","equivalente":"Revisão de literais/configuração, SecretStorage, histórico Git e exposição de segredos/diff durante transporte e execução de provedores."},
+    {"categoria":"5. INPUTS SEM TRATAMENTO (XSS)","equivalente":"Revisão da webview: HTML gerado, CSP, serialização do histórico, conteúdo de modelos/diagnóstico e APIs DOM; não há templates/e-mails backend."}
+  ],
+  "achados": [
+    {
+      "id":"AC-SEC-001","severidade":"média","categoria":"Isolamento de contexto","arquivo":"extension.js","linhas":"18-21, 50-63",
+      "titulo":"Seleção de repositório por prefixo pode enviar o diff do repositório errado ao provedor",
+      "descricao":"A seleção usa String.startsWith() sobre caminhos e, se não houver editor ativo, cai silenciosamente no primeiro repositório. Em workspace multi-root, um root cujo caminho seja prefixo de outro pode ser selecionado incorretamente. O diff desse repositório é então enviado ao provedor configurado.",
+      "trecho":"return repositories.find((repository) => activeFilePath?.startsWith(repository.rootUri.fsPath)) || repositories[0];\n...\nprompt: buildPrompt(diff.content, attemptNumber > 1),",
+      "explorabilidade":"Requer dois ou mais repositórios abertos. Exemplo: roots /work/app e /work/app-private, com /work/app aparecendo primeiro; um arquivo ativo em /work/app-private também começa com /work/app. Sem editor ativo, a queda para repositories[0] também pode operar sobre o contexto não pretendido.",
+      "impacto":"Confidencialidade: alterações de um repositório diferente do pretendido podem ser enviadas ao OpenRouter ou a um CLI/provedor remoto. Não concede acesso a outro usuário, mas quebra o isolamento entre contextos locais de código.",
+      "recomendacao":"Resolver pertencimento por limite de caminho (path.relative/Uri), escolher o root mais específico e, quando o comando for acionado no SCM, preservar explicitamente o repositório de origem. Se o contexto for ambíguo, solicitar seleção em vez de cair no primeiro repositório."
+    },
+    {
+      "id":"AC-SEC-002","severidade":"média","categoria":"Chaves expostas","arquivo":"src/settings-panel.js; src/providers.js","linhas":"settings-panel.js:36-39; providers.js:228-244",
+      "titulo":"Chave do OpenRouter pode ser transmitida em HTTP sem TLS",
+      "descricao":"A validação aceita http: e https: para openRouterBaseUrl. requestOpenRouter recupera a chave do SecretStorage e a envia no cabeçalho Authorization para a URL configurada.",
+      "trecho":"if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error();\n...\nAuthorization: `Bearer ${apiKey}`",
+      "explorabilidade":"O padrão é HTTPS e é seguro. O risco existe quando o usuário configura openRouterBaseUrl com http:// para um host não-loopback. Nesse cenário, um observador na rede ou intermediário capaz de interceptar o tráfego pode obter a chave em claro.",
+      "impacto":"Roubo da API key do OpenRouter, consumo indevido de cota/créditos e acesso às permissões associadas à chave.",
+      "recomendacao":"Exigir HTTPS para OpenRouter. Se compatibilidade local for necessária, permitir HTTP somente para loopback (127.0.0.1, ::1, localhost) e rejeitar qualquer outro host sem TLS."
+    },
+    {
+      "id":"AC-SEC-003","severidade":"baixa","categoria":"Chaves expostas","arquivo":"src/providers.js","linhas":"186-190, 404-435",
+      "titulo":"OpenCode recebe o prompt com o diff como argumento de linha de comando",
+      "descricao":"buildOpenCodeArguments adiciona o prompt inteiro ao argv e requestOpenCode executa o processo com essa lista. O código omite o prompt apenas dos logs internos via displayArguments; isso não o remove da linha de comando real do processo.",
+      "trecho":"argumentsList.push(prompt);\n...\nconst argumentsList = buildOpenCodeArguments(model, prompt);\n...\nconst displayArguments = argumentsList.slice(0, -1).concat('[PROMPT OMITIDO]');",
+      "explorabilidade":"Requer o provedor OpenCode e um ambiente em que argumentos de processos possam ser inspecionados (por exemplo, process list/procfs conforme política do sistema). O conteúdo exposto é o prompt, que inclui até 60.000 caracteres do diff e pode conter código ou segredos acidentalmente alterados.",
+      "impacto":"Exposição local de código-fonte e de possíveis credenciais presentes no diff a outros processos/usuários com visibilidade da linha de comando.",
+      "recomendacao":"Preferir stdin para transmitir o prompt ao OpenCode. Se a CLI não aceitar stdin, usar arquivo temporário com permissão restrita e remoção imediata, evitando conteúdo sensível em argv."
+    }
+  ],
+  "pontos_fortes": [
+    {"evidencia":"package.json:33-42","texto":"Todas as configurações contribuídas usam scope=machine; workspaces não conseguem sobrescrever URL/executáveis via .vscode/settings.json."},
+    {"evidencia":"src/settings-panel.js:92-101","texto":"A chave OpenRouter é armazenada em extensionContext.secrets (VS Code SecretStorage), não em settings.json."},
+    {"evidencia":"src/providers.js:266-274","texto":"Execução de CLIs usa spawn com shell:false, reduzindo risco de command injection por metacaracteres em argumentos."},
+    {"evidencia":"src/providers.js:168-183","texto":"Codex é chamado com sessão ephemeral, sandbox read-only, ignore-user-config e ignore-rules; o prompt é enviado por stdin."},
+    {"evidencia":"src/settings-panel.js:21-27, 168-176, 183, 264-281","texto":"Webview escapa valores interpolados, neutraliza '<' no JSON embutido, usa CSP com nonce e renderiza conteúdo dinâmico com textContent/New Option."},
+    {"evidencia":".gitignore:20-23; histórico 7349171..9476e02","texto":"Arquivos .env são ignorados; a árvore dos quatro commits não contém .env, chave privada ou arquivo de credencial, e não foi encontrada chave real hardcoded."},
+    {"evidencia":"src/settings-panel.js:30-45","texto":"Valores recebidos da webview passam por validação de provedor, URLs e timeout antes de persistência/teste/geração."},
+    {"evidencia":"src/commit-message.js:9-38","texto":"O prompt instrui tratar o diff como dados e ignorar instruções contidas nele; a saída ainda passa por validação estrutural antes de entrar no campo de commit."}
+  ],
+  "categorias": [
+    {"nome":"Isolamento/contexto","achados":1,"status":"1 achado médio"},
+    {"nome":"Permissão no navegador","achados":0,"status":"N/A - sem auth/roles/backend"},
+    {"nome":"IDOR","achados":0,"status":"N/A - sem handlers HTTP/objetos por ID"},
+    {"nome":"Chaves/segredos","achados":2,"status":"2 achados (1 médio, 1 baixo); nenhum hardcode real"},
+    {"nome":"XSS/inputs","achados":0,"status":"Sem XSS verificável"}
+  ],
+  "cobertura": [
+    "extension.js: integração Git, seleção de repositório, quatro comandos registrados e fluxo de geração",
+    "src/commit-message.js: montagem do prompt, limpeza e validação da resposta",
+    "src/diagnostics.js: armazenamento/log de diagnóstico",
+    "src/providers.js: HTTP/HTTPS, Ollama, OpenRouter, OpenCode, Codex, argv/stdin, cancelamento e modelos",
+    "src/settings-panel.js: todos os tipos de mensagem da webview, persistência, SecretStorage, CSP e sinks DOM",
+    "package.json e extension.vsixmanifest: escopos/configurações e empacotamento",
+    ".gitignore e README.md: segredos, defaults e documentação de segurança",
+    "test/*.test.js: testes existentes e premissas de segurança",
+    "Histórico Git completo disponível: 7349171, 325b5a1, 021c302 e 9476e02; árvores recursivas revisadas"
+  ],
+  "nao_aplicavel": [
+    "Banco/ORM/RLS: o projeto não possui persistência de dados de aplicação.",
+    "Autorização por papel: não há conta de usuário, admin, role ou servidor que exponha operações privilegiadas.",
+    "IDOR: não há rotas HTTP próprias nem objetos persistidos acessados por identificador.",
+    "Frontend bundle: a UI é uma webview local gerada em runtime; não existe bundle web distribuído com segredo.",
+    "E-mails/templates backend: inexistentes.",
+    "Docker/CI/Helm/Terraform: não existem na árvore auditada."
+  ],
+  "recomendacoes": [
+    {"prioridade":"P1","texto":"Restringir openRouterBaseUrl a HTTPS, liberando HTTP somente para loopback quando necessário."},
+    {"prioridade":"P2","texto":"Corrigir a seleção de repositório para usar limite real de path/root e eliminar fallback silencioso em ambientes multi-root."},
+    {"prioridade":"P3","texto":"Remover o diff/prompt de argv no OpenCode e transportá-lo por stdin ou arquivo temporário 0600."},
+    {"prioridade":"P4","texto":"Adicionar testes de regressão para roots com prefixo, OpenRouter HTTP remoto rejeitado e webview com payloads XSS."},
+    {"prioridade":"P5","texto":"Quando CI for adicionado, incluir npm test/check e secret scanning sem expor secrets a código de forks."}
+  ],
+  "issues": [
+    {"numero":1,"titulo":"[Segurança] Corrigir seleção ambígua de repositório em workspaces multi-root","labels":"security, severity:medium","markdown":"## Descrição\nA extensão seleciona o repositório usando `activeFilePath.startsWith(repository.rootUri.fsPath)` e cai para `repositories[0]` quando não encontra um editor ativo. Em workspaces multi-root isso pode associar o arquivo ativo ao repositório errado quando um root é prefixo textual de outro, ou simplesmente escolher o primeiro repositório sem contexto.\n\nComo o diff selecionado é enviado ao provedor de IA, a falha pode causar divulgação não intencional de alterações de outro repositório.\n\n## Evidência\n`extension.js:18-21`\n```js\nfunction selectRepository(repositories) {\n  if (repositories.length === 0) throw new Error('Nenhum repositorio Git aberto.');\n  const activeFilePath = vscode.window.activeTextEditor?.document.uri.fsPath;\n  return repositories.find((repository) => activeFilePath?.startsWith(repository.rootUri.fsPath)) || repositories[0];\n}\n```\n\n`extension.js:50-63`\n```js\nconst repository = await getRepository();\nconst diff = await getDiff(repository);\n...\nprompt: buildPrompt(diff.content, attemptNumber > 1),\n```\n\n## Impacto\nAlterações de um repositório diferente do pretendido podem ser enviadas ao OpenRouter ou a outro provedor remoto, expondo código-fonte e dados presentes no diff.\n\n## Condições de exploração\n- workspace com múltiplos repositórios; e\n- roots com colisão de prefixo (ex.: `/work/app` e `/work/app-private`) **ou** execução sem editor ativo/contexto inequívoco.\n\n## Sugestão de correção\n- determinar pertencimento usando `path.relative()`/URI e limites reais de diretório;\n- preferir o root mais específico;\n- preservar o repositório SCM que originou o comando quando disponível;\n- se houver ambiguidade, pedir ao usuário para escolher em vez de usar `repositories[0]`.\n\n## Critérios de aceite\n- [ ] Um arquivo em `/work/app-private` nunca é associado a `/work/app` apenas por prefixo textual.\n- [ ] Em multi-root sem editor ativo, a extensão não escolhe silenciosamente o primeiro repositório.\n- [ ] O diff enviado ao provedor corresponde ao repositório escolhido pelo usuário.\n- [ ] Existem testes automatizados para roots com prefixo e para ausência de editor ativo."},
+    {"numero":2,"titulo":"[Segurança] Impedir envio da chave OpenRouter por HTTP sem TLS","labels":"security, severity:medium","markdown":"## Descrição\nA validação da URL do OpenRouter aceita `http:` e `https:`. A chave armazenada no SecretStorage é posteriormente enviada no cabeçalho `Authorization: Bearer` para a URL configurada.\n\nO padrão atual (`https://openrouter.ai/api/v1`) é seguro. O problema aparece quando uma URL customizada `http://` aponta para um host não-loopback: a chave passa pela rede sem TLS.\n\n## Evidência\n`src/settings-panel.js:36-39`\n```js\nfor (const urlKey of ['ollamaBaseUrl', 'openRouterBaseUrl']) {\n  const parsedUrl = new URL(values[urlKey]);\n  if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error();\n}\n```\n\n`src/providers.js:228-244`\n```js\nconst apiKey = await secrets.get(OPENROUTER_SECRET_KEY);\nconst baseUrl = configuration.get('openRouterBaseUrl', 'https://openrouter.ai/api/v1');\n...\nheaders: {\n  Authorization: `Bearer ${apiKey}`,\n}\n```\n\n## Impacto\nUm atacante em posição de observar/manipular o tráfego pode capturar a API key e usar a cota, créditos e permissões associados a ela.\n\n## Condições de exploração\n- o usuário altera `aiCommit.openRouterBaseUrl` para `http://...`;\n- o host não é exclusivamente loopback;\n- existe um observador/intermediário no caminho de rede.\n\n## Sugestão de correção\nExigir HTTPS para OpenRouter. Se houver necessidade de proxy local sem TLS, permitir HTTP apenas para `127.0.0.1`, `::1` e `localhost`.\n\n## Critérios de aceite\n- [ ] `https://` continua aceito para OpenRouter.\n- [ ] `http://127.0.0.1`, `http://[::1]` e/ou `http://localhost` são aceitos somente se a compatibilidade local for desejada.\n- [ ] `http://` para qualquer host remoto é rejeitado antes de salvar/testar/gerar.\n- [ ] Há teste automatizado cobrindo os casos acima."},
+    {"numero":3,"titulo":"[Segurança] Remover conteúdo do diff dos argumentos do processo OpenCode","labels":"security, severity:low","markdown":"## Descrição\nO prompt enviado ao OpenCode contém o diff e é colocado como último argumento de linha de comando. A extensão mascara esse argumento apenas no diagnóstico (`[PROMPT OMITIDO]`), porém o processo real continua recebendo o conteúdo em `argv`.\n\nEm sistemas onde argumentos de processos podem ser observados, código-fonte e eventuais segredos presentes no diff podem aparecer em listagens de processos/procfs.\n\n## Evidência\n`src/providers.js:186-190`\n```js\nfunction buildOpenCodeArguments(model, prompt) {\n  const argumentsList = ['run', '--format', 'json', '--thinking'];\n  if (model) argumentsList.push('--model', model);\n  argumentsList.push(prompt);\n  return argumentsList;\n}\n```\n\n`src/providers.js:404-435`\n```js\nconst argumentsList = buildOpenCodeArguments(model, prompt);\n...\nconst displayArguments = argumentsList.slice(0, -1).concat('[PROMPT OMITIDO]');\nconst result = await runCli({\n  executable,\n  argumentsList,\n  standardInput: '',\n  ...\n});\n```\n\n## Impacto\nExposição local do diff, incluindo código-fonte e credenciais que tenham sido adicionadas/alteradas acidentalmente.\n\n## Condições de exploração\n- provedor OpenCode selecionado;\n- diff contém informação sensível;\n- outro processo/usuário possui visibilidade dos argumentos de processos segundo a política do sistema operacional.\n\n## Sugestão de correção\nEnviar o prompt por stdin, como já é feito com Codex. Se a CLI OpenCode não suportar stdin, usar um arquivo temporário com permissão 0600 e remoção imediata, sem incluir o conteúdo em argv.\n\n## Critérios de aceite\n- [ ] O conteúdo do prompt/diff não aparece em `argv` do processo OpenCode.\n- [ ] O diagnóstico continua sem registrar o diff.\n- [ ] A geração com OpenCode continua funcional.\n- [ ] Há teste automatizado garantindo que `buildOpenCodeArguments` não recebe/contenha o prompt sensível."}
+  ]
+}
